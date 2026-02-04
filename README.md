@@ -89,6 +89,9 @@ in a convenient way using [rofi](https://github.com/DaveDavenport/rofi).
 
   Alternative change the backend in the config file using
   `backend=wtype` or `clibpoard_backend=wl-clipboard`.
+  If no backend is configured, rofi-pass auto-selects `wtype` and
+  `wl-clipboard` on Wayland when available, otherwise it defaults to
+  `xdotool` and `xclip`.
 ## Requirements
 
 * [pass](http://www.passwordstore.org/)

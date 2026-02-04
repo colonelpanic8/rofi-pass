@@ -59,26 +59,16 @@ insert_pass="Alt+n"
 qrcode="Alt+q"
 previous_root="Shift+Left"
 next_root="Shift+Right"
-clipboard_backend=${ROFI_PASS_CLIPBOARD_BACKEND:-xclip}
-backend=${ROFI_PASS_BACKEND:-xdotool}
-
-case "$clipboard_backend" in
-	"xclip");;
-	"wl-clipboard");;
-	*)
-		>&2 echo "Invalid clipboard backend '$clipboard_backend', falling back to xclip"
-		clipboard_backend=xclip
-		;;
-esac
-
-case "$backend" in
-	"xdotool");;
-	"wtype");;
-	*)
-		>&2 echo "Invalid backend '$backend', falling back to xdotool"
-		backend=xdotool
-		;;
-esac
+clipboard_backend="${ROFI_PASS_CLIPBOARD_BACKEND-}"
+backend="${ROFI_PASS_BACKEND-}"
+backend_set=false
+clipboard_backend_set=false
+if [[ -n ${ROFI_PASS_BACKEND+x} ]]; then
+	backend_set=true
+fi
+if [[ -n ${ROFI_PASS_CLIPBOARD_BACKEND+x} ]]; then
+	clipboard_backend_set=true
+fi
 
 # Safe permissions
 umask 077
@@ -136,6 +126,10 @@ _do_press_key_wtype() {
 
 has_qrencode() {
 	command -v qrencode >/dev/null 2>&1
+}
+
+is_wayland_session() {
+	[[ -n "${WAYLAND_DISPLAY}" || "${XDG_SESSION_TYPE}" == "wayland" ]]
 }
 
 listgpg () {
@@ -903,7 +897,67 @@ get_config_file () {
 main () {
 	# load config file
 	config_file="$(get_config_file)"
-	[[ -n "$config_file" ]] && source "$config_file"
+	if [[ -n "$config_file" ]]; then
+		if [[ $backend_set == false ]]; then
+			if grep -Eq '^[[:space:]]*(export[[:space:]]+)?backend=' "$config_file"; then
+				backend_set=true
+			fi
+		fi
+		if [[ $clipboard_backend_set == false ]]; then
+			if grep -Eq '^[[:space:]]*(export[[:space:]]+)?clipboard_backend=' "$config_file"; then
+				clipboard_backend_set=true
+			fi
+		fi
+		source "$config_file"
+	fi
+
+	if [[ $backend_set == false ]]; then
+		if is_wayland_session && command -v wtype >/dev/null 2>&1; then
+			backend="wtype"
+		elif [[ -z "$backend" ]]; then
+			backend="xdotool"
+		fi
+	fi
+	if [[ $clipboard_backend_set == false ]]; then
+		if is_wayland_session && command -v wl-copy >/dev/null 2>&1; then
+			clipboard_backend="wl-clipboard"
+		elif [[ -z "$clipboard_backend" ]]; then
+			clipboard_backend="xclip"
+		fi
+	fi
+
+	if [[ -z "$backend" ]]; then
+		backend="xdotool"
+	fi
+	if [[ -z "$clipboard_backend" ]]; then
+		clipboard_backend="xclip"
+	fi
+
+	case "$clipboard_backend" in
+		"xclip");;
+		"wl-clipboard");;
+		*)
+			>&2 echo "Invalid clipboard backend '$clipboard_backend', falling back to auto"
+			if is_wayland_session && command -v wl-copy >/dev/null 2>&1; then
+				clipboard_backend="wl-clipboard"
+			else
+				clipboard_backend="xclip"
+			fi
+			;;
+	esac
+
+	case "$backend" in
+		"xdotool");;
+		"wtype");;
+		*)
+			>&2 echo "Invalid backend '$backend', falling back to auto"
+			if is_wayland_session && command -v wtype >/dev/null 2>&1; then
+				backend="wtype"
+			else
+				backend="xdotool"
+			fi
+			;;
+	esac
 
 	# create tmp dir
 	if [[ ! -d "$cache_dir/rofi-pass" ]]; then
